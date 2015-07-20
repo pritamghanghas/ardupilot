@@ -123,6 +123,33 @@ void Copter::update_optical_flow(void)
 }
 #endif  // OPTFLOW == ENABLED
 
+#if PRECISION_LANDING == ENABLED
+// initialize the irlock sensor
+void Copter::init_precland()
+{
+    if (!precland.enabled())
+        return;
+    precland.init();
+    if (!precland.healthy()) {
+        cliSerial->print_P(PSTR("Failed to initialize IRLock\n"));
+        Log_Write_Error(ERROR_SUBSYSTEM_IRLOCK, ERROR_CODE_FAILED_TO_INITIALISE);
+    }
+}
+
+// update the irlock sensor
+void Copter::update_precland()
+{
+    if (!precland.enabled()){
+        return;
+    }
+
+    precland.update(current_loc.alt);
+
+    // log output
+    Log_Write_Precland();
+}
+#endif
+
 // read_battery - check battery voltage and current and invoke failsafe if necessary
 // called at 10hz
 void Copter::read_battery(void)

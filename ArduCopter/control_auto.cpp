@@ -316,7 +316,10 @@ void Copter::auto_land_run()
     // process roll, pitch inputs
     wp_nav.set_pilot_desired_acceleration(roll_control, pitch_control);
 
-    // run loiter controller
+#if PRECISION_LANDING == ENABLED
+    wp_nav.shift_loiter_target(precland.get_target_shift(wp_nav.get_loiter_target()));
+#endif
+
     wp_nav.update_loiter(ekfGndSpdLimit, ekfNavVelGainScaler);
 
     // call z-axis position controller

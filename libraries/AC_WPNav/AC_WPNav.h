@@ -45,6 +45,8 @@
 
 #define WPNAV_YAW_DIST_MIN                 200      // minimum track length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
 
+#define IRLOCK_LOITER_UPDATE_TIME          0.2f            // the wait time for irlock_loiter to update a new marker position
+
 class AC_WPNav
 {
 public:
@@ -70,6 +72,10 @@ public:
     /// init_loiter_target - initialize's loiter position and feed-forward velocity from current pos and velocity
     void init_loiter_target();
 
+    /// shift_loiter_target - shifts the loiter target by the given pos_adjustment
+    ///     used by precision landing to adjust horizontal position target
+    void shift_loiter_target(const Vector3f &pos_adjustment);
+
     /// loiter_soften_for_landing - reduce response for landing
     void loiter_soften_for_landing();
 
@@ -91,8 +97,14 @@ public:
     /// get_loiter_bearing_to_target - get bearing to loiter target in centi-degrees
     int32_t get_loiter_bearing_to_target() const;
 
+    /// get_loiter_target - returns loiter target position
+    const Vector3f& get_loiter_target() const { return _pos_control.get_pos_target(); }
+
     /// update_loiter - run the loiter controller - should be called at 10hz
     void update_loiter(float ekfGndSpdLimit, float ekfNavVelGainScaler);
+
+    /// update_irlock_loiter - run the irlock loiter controller - should be called at 10 hz
+//    void update_irlock_loiter(float irlock_error_lat, float irlock_error_lon);
 
     ///
     /// brake controller
@@ -297,6 +309,10 @@ protected:
 
     // waypoint controller internal variables
     uint32_t    _wp_last_update;        // time of last update_wpnav call
+    float      _irlock_last_update;     // time of last position update for irlock_xy_controller
+    float _irlock_pos_sum_x;            // sum of the irlock marker y positions
+    float      _irlock_pos_sum_y;       // sum of the irlock marker x positions
+    uint16_t   _irlock_iter;            // iterater for irlock position sum
     uint8_t     _wp_step;               // used to decide which portion of wpnav controller to run during this iteration
     Vector3f    _origin;                // starting point of trip to next waypoint in cm from home (equivalent to next_WP)
     Vector3f    _destination;           // target destination in cm from home (equivalent to next_WP)

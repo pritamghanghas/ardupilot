@@ -72,6 +72,12 @@ void Copter::loiter_run()
             // clear i term when we're taking off
             set_throttle_takeoff();
         }
+
+        // record if pilot has overriden roll or pitch
+        ap.land_repo_active = false;
+        if (channel_roll->control_in != 0 || channel_pitch->control_in != 0) {
+            ap.land_repo_active = true;
+        }
     } else {
         // clear out pilot desired acceleration in case radio failsafe event occurs and we do not switch to RTL for some reason
         wp_nav.clear_pilot_desired_acceleration();
@@ -88,7 +94,13 @@ void Copter::loiter_run()
         // move throttle to between minimum and non-takeoff-throttle to keep us on the ground
         attitude_control.set_throttle_out_unstabilized(get_throttle_pre_takeoff(channel_throttle->control_in),true,g.throttle_filt);
         pos_control.relax_alt_hold_controllers(get_throttle_pre_takeoff(channel_throttle->control_in)-throttle_average);
-    }else{
+    } else {
+#if PRECISION_LANDING == ENABLED
+        // run precision landing
+        if (!ap.land_repo_active) {
+            wp_nav.shift_loiter_target(precland.get_target_shift(wp_nav.get_loiter_target()));
+        }
+#endif
         // run loiter controller
         wp_nav.update_loiter(ekfGndSpdLimit, ekfNavVelGainScaler);
 

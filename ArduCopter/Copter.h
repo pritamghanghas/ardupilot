@@ -102,6 +102,9 @@
 #endif
 #include <AP_LandingGear.h>     // Landing Gear library
 #include <AP_Terrain.h>
+#if PRECISION_LANDING == ENABLED
+#include <AC_PrecLand.h>
+#endif
 
 // AP_HAL to Arduino compatibility layer
 // Configuration
@@ -232,6 +235,7 @@ private:
             enum HomeState home_state   : 2; // 18,19   // home status (unset, set, locked)
             uint8_t using_interlock     : 1; // 20      // aux switch motor interlock function is in use
             uint8_t motor_emergency_stop: 1; // 21      // motor estop switch, shuts off motors when enabled
+            uint8_t land_repo_active    : 1; // 22      // true if pilot has applied roll or pitch inputs during landing (used to disable automatic precision landing)
         };
         uint32_t value;
     } ap;
@@ -483,6 +487,10 @@ private:
     AP_Terrain terrain;
 #endif
 
+//#if PRECISION_LANDING == ENABLED
+//    bool irlock_blob_detected;
+//#endif
+
     // use this to prevent recursion during sensor init
     bool in_mavlink_delay;
 
@@ -509,6 +517,12 @@ private:
     static const AP_Scheduler::Task scheduler_tasks[];
     static const AP_Param::Info var_info[];
     static const struct LogStructure log_structure[];
+
+#if PRECISION_LANDING == ENABLED
+    AC_PrecLand precland;
+    void init_precland();
+    void update_precland();
+#endif
 
     void compass_accumulate(void);
     void barometer_accumulate(void);
@@ -604,6 +618,9 @@ private:
     void Log_Write_Parameter_Tuning(uint8_t param, float tuning_val, int16_t control_in, int16_t tune_low, int16_t tune_high);
 #if FRAME_CONFIG == HELI_FRAME
     void Log_Write_Heli(void);
+#endif
+#if PRECISION_LANDING == ENABLED
+    void Log_Write_Precland();
 #endif
     void Log_Read(uint16_t log_num, uint16_t start_page, uint16_t end_page);
     void start_logging() ;

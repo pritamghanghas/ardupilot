@@ -113,6 +113,10 @@ AC_WPNav::AC_WPNav(const AP_InertialNav& inav, const AP_AHRS& ahrs, AC_PosContro
     _pilot_accel_fwd_cms(0),
     _pilot_accel_rgt_cms(0),
     _wp_last_update(0),
+    _irlock_last_update(0),
+    _irlock_pos_sum_x(0),
+    _irlock_pos_sum_y(0),
+    _irlock_iter(0),
     _wp_step(0),
     _track_length(0.0f),
     _track_desired(0.0f),
@@ -164,6 +168,21 @@ void AC_WPNav::init_loiter_target(const Vector3f& position, bool reset_I)
     // initialise pilot input
     _pilot_accel_fwd_cms = 0;
     _pilot_accel_rgt_cms = 0;
+}
+
+/// shift_loiter_target - shifts the loiter target by the given pos_adjustment
+///     used by precision landing to adjust horizontal position target
+void AC_WPNav::shift_loiter_target(const Vector3f &pos_adjustment)
+{
+    Vector3f new_target = _pos_control.get_pos_target() + pos_adjustment;
+
+    // move pos controller target
+    _pos_control.set_xy_target(new_target.x, new_target.y);
+
+    // disable feed forward
+    if (fabsf(pos_adjustment.x) > 0.0f || fabsf(pos_adjustment.y) > 0.0f) {
+        _pos_control.freeze_ff_xy();
+    }
 }
 
 /// init_loiter_target - initialize's loiter position and feed-forward velocity from current pos and velocity
@@ -316,6 +335,65 @@ void AC_WPNav::update_loiter(float ekfGndSpdLimit, float ekfNavVelGainScaler)
         _pos_control.update_xy_controller(AC_PosControl::XY_MODE_POS_LIMITED_AND_VEL_FF, ekfNavVelGainScaler);
     }
 }
+
+/// update_loiter - run the loiter controller - should be called at 100hz
+//void AC_WPNav::update_irlock_loiter(float irlock_error_lat, float irlock_error_lon)
+//{
+//    const Vector3f& curr_pos = _inav.get_position();
+//    // calculate dt
+//    uint32_t now = hal.scheduler->millis();
+//    float dt = (now - _loiter_last_update) / 1000.0f;
+//    // sum the x and y irlock marker positions
+//    _irlock_pos_sum_x = _irlock_pos_sum_x + curr_pos.x + irlock_error_lat;
+//    _irlock_pos_sum_y = _irlock_pos_sum_y + curr_pos.y + irlock_error_lon;
+//    // keep count of how many irlock marker positions have been summed
+//    _irlock_iter = _irlock_iter + 1;
+//    // reset step back to 0 if 0.1 seconds has passed and we completed the last full cycle
+//    if (dt >= WPNAV_LOITER_UPDATE_TIME) {
+//        // double check dt is reasonable
+//        if (dt >= 1.0f) {
+//            dt = 0.0;
+//        }
+//        // update the irlock_loiter target position after IRLOCK_LOITER_UPDATE_TIME has passed
+//        float irlock_dt = (now - _irlock_last_update) / 1000.0f;
+//        if (irlock_dt >= IRLOCK_LOITER_UPDATE_TIME + 0.1)
+//        {
+//            float irlock_pos_avg_x = curr_pos.x + irlock_error_lat;
+//            float irlock_pos_avg_y = curr_pos.y + irlock_error_lon;
+//            _irlock_iter = 0;
+//            _irlock_pos_sum_x = 0;
+//            _irlock_pos_sum_y = 0;
+//            _pos_control.set_xy_target(irlock_pos_avg_x, irlock_pos_avg_y);
+//            // disable feed forward variables for irlock_loiter position update
+//            _pos_control.freeze_ff_xy();
+//            //capture time since last iteration
+//            _irlock_last_update = now;
+//        } else if (irlock_dt >= IRLOCK_LOITER_UPDATE_TIME) {
+//            // take average of the irlock marker positions
+//            float irlock_pos_avg_x = _irlock_pos_sum_x/_irlock_iter;
+//            float irlock_pos_avg_y = _irlock_pos_sum_y/_irlock_iter;
+//            // reset irlock marker position sum variables and iteration variables back to zero
+//            _irlock_pos_sum_x = 0;
+//            _irlock_pos_sum_y = 0;
+//            _irlock_iter = 0;
+//            // set target position
+//            _pos_control.set_xy_target(irlock_pos_avg_x, irlock_pos_avg_y);
+//            // disable feed forward variables for irlock_loiter position update
+//            _pos_control.freeze_ff_xy();
+//            //capture time since last iteration
+//            _irlock_last_update = now;
+//        }
+//        // capture time since last iteration
+//        _loiter_last_update = now;
+//        // translate any adjustments from pilot to loiter target
+//        calc_loiter_desired_velocity(dt);
+//        // trigger position controller on next update
+//        _pos_control.trigger_xy();
+//    } else {
+//        // run horizontal position controller
+//        _pos_control.update_xy_controller(true);
+//    }
+//}
 
 /// init_brake_target - initializes stop position from current position and velocity
 void AC_WPNav::init_brake_target(float accel_cmss)
