@@ -156,6 +156,7 @@ protected:
     struct mount_state {
         // Parameters
         AP_Int8         _type;              // mount type (None, Servo or MAVLink, see MountType enum)
+        AP_Int8         _drive_mode;        // 0 = standard, 1 = super simple
         AP_Int8         _default_mode;      // default mode on startup and when control is returned from autopilot
         AP_Int8         _stab_roll;         // 1 = mount should stabilize earth-frame roll axis, 0 = no stabilization
         AP_Int8         _stab_tilt;         // 1 = mount should stabilize earth-frame pitch axis

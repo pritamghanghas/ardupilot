@@ -91,9 +91,17 @@ void AP_Mount_Servo::update()
     }
 
     // write the results to the servos
-    move_servo(_roll_idx, _angle_bf_output_deg.x*10, _state._roll_angle_min*0.1f, _state._roll_angle_max*0.1f);
-    move_servo(_tilt_idx, _angle_bf_output_deg.y*10, _state._tilt_angle_min*0.1f, _state._tilt_angle_max*0.1f);
-    move_servo(_pan_idx,  _angle_bf_output_deg.z*10, _state._pan_angle_min*0.1f, _state._pan_angle_max*0.1f);
+    if (_state._drive_mode == 1) {
+       // Super Simple Gimbal, need to mix tilt and roll angles to move both servos at once
+       move_servo(_roll_idx, (_angle_bf_output_deg.y+_angle_bf_output_deg.x)*10, _state._roll_angle_min*0.1f, _state._roll_angle_max*0.1f);
+       move_servo(_tilt_idx, (_angle_bf_output_deg.y-_angle_bf_output_deg.x)*10, _state._tilt_angle_min*0.1f, _state._tilt_angle_max*0.1f);
+       move_servo(_pan_idx,  _angle_bf_output_deg.z*10, _state._pan_angle_min*0.1f, _state._pan_angle_max*0.1f);
+    } else {
+       // Standard drive, one servo per axis
+        move_servo(_roll_idx, _angle_bf_output_deg.x*10, _state._roll_angle_min*0.1f, _state._roll_angle_max*0.1f);
+        move_servo(_tilt_idx, _angle_bf_output_deg.y*10, _state._tilt_angle_min*0.1f, _state._tilt_angle_max*0.1f);
+        move_servo(_pan_idx,  _angle_bf_output_deg.z*10, _state._pan_angle_min*0.1f, _state._pan_angle_max*0.1f);
+    }
 }
 
 // set_mode - sets mount's mode

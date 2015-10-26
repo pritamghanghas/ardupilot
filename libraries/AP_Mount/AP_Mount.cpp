@@ -273,6 +273,13 @@ const AP_Param::GroupInfo AP_Mount::var_info[] PROGMEM = {
     // @User: Advanced
     AP_GROUPINFO("_K_RATE", 23, AP_Mount, state[0]._gimbalParams.K_gimbalRate, 5.0f),
 
+    // @Param: DRIVE_MODE
+    // @DisplayName: Drive mode for mount
+    // @Description: 0 for a standard mount with a servo per axis, 1 for super simple gimbal style mount
+    // @Values: 0:standard,1:super_simple
+    // @User: Standard
+    AP_GROUPINFO("DRIVE_MODE", 24, AP_Mount, state[0]._drive_mode,  0),
+
     // 20 ~ 24 reserved for future parameters
 
 #if AP_MOUNT_MAX_INSTANCES > 1
