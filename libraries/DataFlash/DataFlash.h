@@ -63,8 +63,6 @@ public:
         return _instance;
     }
 
-    void set_mission(const AP_Mission *mission);
-
     // initialisation
     void Init(const struct LogStructure *structure, uint8_t num_types);
     void set_num_types(uint8_t num_types) { _num_types = num_types; }
@@ -124,8 +122,8 @@ public:
     void Log_Write_Radio(const mavlink_radio_t &packet);
     void Log_Write_Message(const char *message);
     void Log_Write_MessageF(const char *fmt, ...);
-    void Log_Write_CameraInfo(enum LogMessages msg, const AP_AHRS &ahrs, const Location &current_loc);
-    void Log_Write_Camera(const AP_AHRS &ahrs, const Location &current_loc);
+    void Log_Write_CameraInfo(enum LogMessages msg, const AP_AHRS &ahrs, const Location &current_loc, uint64_t timestamp_us=0);
+    void Log_Write_Camera(const AP_AHRS &ahrs, const Location &current_loc, uint64_t timestamp_us=0);
     void Log_Write_Trigger(const AP_AHRS &ahrs, const Location &current_loc);
     void Log_Write_ESC(void);
     void Log_Write_Airspeed(AP_Airspeed &airspeed);
@@ -211,7 +209,7 @@ public:
     const struct UnitStructure *unit(uint16_t num) const;
     const struct MultiplierStructure *multiplier(uint16_t num) const;
 
-    // methods for mavlink SYS_STATUS message (send_extended_status1)
+    // methods for mavlink SYS_STATUS message (send_sys_status)
     // these methods cover only the first logging backend used -
     // typically DataFlash_File.
     bool logging_present() const;

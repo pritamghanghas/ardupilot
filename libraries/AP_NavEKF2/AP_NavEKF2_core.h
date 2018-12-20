@@ -527,7 +527,7 @@ private:
     void StoreQuatReset(void);
 
     // Rotate the stored output quaternion history through a quaternion rotation
-    void StoreQuatRotate(Quaternion deltaQuat);
+    void StoreQuatRotate(const Quaternion &deltaQuat);
 
     // store altimeter data
     void StoreBaro();
@@ -1173,6 +1173,9 @@ private:
 
     // timing statistics
     struct ekf_timing timing;
+
+    // when was attitude filter status last non-zero?
+    uint32_t last_filter_ok_ms;
     
     // should we assume zero sideslip?
     bool assume_zero_sideslip(void) const;

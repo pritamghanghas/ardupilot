@@ -10,6 +10,7 @@
 #include <AC_Fence/AC_Fence.h>
 #include <AC_Avoidance/AC_Avoid.h>
 #include <AP_Proximity/AP_Proximity.h>
+#include "qautotune.h"
 
 /*
   QuadPlane specific functionality
@@ -21,7 +22,8 @@ public:
     friend class AP_Tuning_Plane;
     friend class GCS_MAVLINK_Plane;
     friend class AP_AdvancedFailsafe_Plane;
-    
+    friend class QAutoTune;
+
     QuadPlane(AP_AHRS_NavEKF &_ahrs);
 
     // var_info for holding Parameter information
@@ -221,7 +223,6 @@ private:
     void run_z_controller(void);
 
     void setup_defaults(void);
-    void setup_defaults_table(const struct defaults_struct *defaults, uint8_t count);
 
     // calculate a stopping distance for fixed-wing to vtol transitions
     float stopping_distance(void);
@@ -233,6 +234,9 @@ private:
 
     // Quadplane trim, degrees
     AP_Float ahrs_trim_pitch;
+
+    // fw landing approach radius
+    AP_Float fw_land_approach_radius;
 
     AP_Int16 rc_speed;
 
@@ -413,6 +417,7 @@ private:
         AP_Float vectored_hover_gain;
         AP_Float vectored_hover_power;
         AP_Float throttle_scale_max;
+        AP_Float max_roll_angle;
     } tailsitter;
 
     // the attitude view of the VTOL attitude controller
@@ -471,7 +476,12 @@ private:
       return true if current mission item is a vtol landing
      */
     bool is_vtol_land(uint16_t id) const;
-    
+
+#if QAUTOTUNE_ENABLED
+    // qautotune mode
+    QAutoTune qautotune;
+#endif
+
 public:
     void motor_test_output();
     MAV_RESULT mavlink_motor_test_start(mavlink_channel_t chan, uint8_t motor_seq, uint8_t throttle_type,

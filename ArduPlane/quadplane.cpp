@@ -33,7 +33,7 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
 
     // 12 ~ 16 were used by position, velocity and acceleration PIDs
 
-    // @Group: P_
+    // @Group: P
     // @Path: ../libraries/AC_AttitudeControl/AC_PosControl.cpp
     AP_SUBGROUPPTR(pos_control, "P", 17, QuadPlane, AC_PosControl),
 
@@ -332,7 +332,7 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
     AP_GROUPINFO("OPTIONS", 58, QuadPlane, options, 0),
 
     AP_SUBGROUPEXTENSION("",59, QuadPlane, var_info2),
-    
+
     AP_GROUPEND
 };
 
@@ -369,18 +369,36 @@ const AP_Param::GroupInfo QuadPlane::var_info2[] = {
     // @RebootRequired: True
     AP_GROUPINFO("TRIM_PITCH", 4, QuadPlane, ahrs_trim_pitch, 0),
 
-    AP_GROUPEND
-};
+    // @Param: TAILSIT_RLL_MX
+    // @DisplayName: Maximum Roll angle
+    // @Description: Maximum Allowed roll angle for tailsitters. If this is zero then Q_ANGLE_MAX is used.
+    // @Units: deg
+    // @Range: 0 80
+    // @User: Standard
+    AP_GROUPINFO("TAILSIT_RLL_MX", 5, QuadPlane, tailsitter.max_roll_angle, 0),
 
-struct defaults_struct {
-    const char *name;
-    float value;
+#if QAUTOTUNE_ENABLED
+    // @Group: AUTOTUNE_
+    // @Path: qautotune.cpp
+    AP_SUBGROUPINFO(qautotune, "AUTOTUNE_",  6, QuadPlane, QAutoTune),
+#endif
+
+    // @Param: FW_LND_APR_RAD
+    // @DisplayName: Quadplane fixed wing landing approach radius
+    // @Description: This provides the radius used, when using a fixed wing landing approach. If set to 0 then the WP_LOITER_RAD will be selected.
+    // @Units: m
+    // @Range: 0 200
+    // @Increment: 5
+    // @User: Advanced
+    AP_GROUPINFO("FW_LND_APR_RAD", 7, QuadPlane, fw_land_approach_radius, 0),
+
+    AP_GROUPEND
 };
 
 /*
   defaults for all quadplanes
  */
-static const struct defaults_struct defaults_table[] = {
+static const struct AP_Param::defaults_table_struct defaults_table[] = {
     { "Q_A_RAT_RLL_P",    0.25 },
     { "Q_A_RAT_RLL_I",    0.25 },
     { "Q_A_RAT_RLL_FILT", 10.0 },
@@ -398,7 +416,7 @@ static const struct defaults_struct defaults_table[] = {
 /*
   extra defaults for tailsitters
  */
-static const struct defaults_struct defaults_table_tailsitter[] = {
+static const struct AP_Param::defaults_table_struct defaults_table_tailsitter[] = {
     { "KFF_RDDRMIX",       0.02 },
     { "Q_A_RAT_PIT_FF",    0.2 },
     { "Q_A_RAT_YAW_FF",    0.2 },
@@ -633,30 +651,16 @@ failed:
 }
 
 /*
-  setup default parameters from a defaults_struct table
- */
-void QuadPlane::setup_defaults_table(const struct defaults_struct *table, uint8_t count)
-{
-    for (uint8_t i=0; i<count; i++) {
-        if (!AP_Param::set_default_by_name(table[i].name, table[i].value)) {
-            gcs().send_text(MAV_SEVERITY_INFO, "QuadPlane setup failure for %s",
-                                             table[i].name);
-            AP_HAL::panic("quadplane bad default %s", table[i].name);
-        }
-    }
-}
-
-/*
   setup default parameters from defaults_table
  */
 void QuadPlane::setup_defaults(void)
 {
-    setup_defaults_table(defaults_table, ARRAY_SIZE(defaults_table));
+    AP_Param::set_defaults_from_table(defaults_table, ARRAY_SIZE(defaults_table));
 
     enum AP_Motors::motor_frame_class motor_class;
     motor_class = (enum AP_Motors::motor_frame_class)frame_class.get();
     if (motor_class == AP_Motors::MOTOR_FRAME_TAILSITTER) {
-        setup_defaults_table(defaults_table_tailsitter, ARRAY_SIZE(defaults_table_tailsitter));
+        AP_Param::set_defaults_from_table(defaults_table_tailsitter, ARRAY_SIZE(defaults_table_tailsitter));
     }
     
     // reset ESC calibration
@@ -941,7 +945,7 @@ bool QuadPlane::is_flying_vtol(void) const
     if (plane.control_mode == GUIDED && guided_takeoff) {
         return true;
     }
-    if (plane.control_mode == QSTABILIZE || plane.control_mode == QHOVER || plane.control_mode == QLOITER) {
+    if (plane.control_mode == QSTABILIZE || plane.control_mode == QHOVER || plane.control_mode == QLOITER || plane.control_mode == QAUTOTUNE) {
         // in manual flight modes only consider aircraft landed when pilot demanded throttle is zero
         return plane.get_throttle_input() > 0;
     }
@@ -1277,8 +1281,10 @@ void QuadPlane::update_transition(void)
         }
     }
     
-    // if rotors are fully forward then we are not transitioning
-    if (tiltrotor_fully_fwd()) {
+    // if rotors are fully forward then we are not transitioning,
+    // unless we are waiting for airspeed to increase (in which case
+    // the tilt will decrease rapidly)
+    if (tiltrotor_fully_fwd() && transition_state != TRANSITION_AIRSPEED_WAIT) {
         transition_state = TRANSITION_DONE;
     }
     
@@ -1324,6 +1330,13 @@ void QuadPlane::update_transition(void)
             climb_rate_cms = MIN(climb_rate_cms, 0.0f);
         }
         hold_hover(climb_rate_cms);
+
+        // set desired yaw to current yaw in both desired angle and
+        // rate request. This reduces wing twist in transition due to
+        // multicopter yaw demands
+        attitude_control->set_yaw_target_to_current_heading();
+        attitude_control->rate_bf_yaw_target(ahrs.get_gyro().z);
+
         last_throttle = motors->get_throttle();
 
         // reset integrators while we are below target airspeed as we
@@ -1361,6 +1374,13 @@ void QuadPlane::update_transition(void)
         }
         assisted_flight = true;
         hold_stabilize(throttle_scaled);
+
+        // set desired yaw to current yaw in both desired angle and
+        // rate request while waiting for transition to
+        // complete. Navigation should be controlled by fixed wing
+        // control surfaces at this stage
+        attitude_control->set_yaw_target_to_current_heading();
+        attitude_control->rate_bf_yaw_target(ahrs.get_gyro().z);
         break;
     }
 
@@ -1421,7 +1441,13 @@ void QuadPlane::update(void)
         /*
           make sure we don't have any residual control from previous flight stages
          */
-        attitude_control->relax_attitude_controllers();
+        if (is_tailsitter()) {
+            // tailsitters only relax I terms, to make ground testing easier
+            attitude_control->reset_rate_controller_I_terms();
+        } else {
+            // otherwise full relax
+            attitude_control->relax_attitude_controllers();
+        }
         pos_control->relax_alt_hold_controllers(0);
     }
     
@@ -1619,6 +1645,11 @@ void QuadPlane::control_run(void)
     case QRTL:
         control_qrtl();
         break;
+#if QAUTOTUNE_ENABLED
+    case QAUTOTUNE:
+        qautotune.run();
+        break;
+#endif
     default:
         break;
     }
@@ -1662,6 +1693,10 @@ bool QuadPlane::init_mode(void)
     case GUIDED:
         guided_takeoff = false;
         break;
+#if QAUTOTUNE_ENABLED
+    case QAUTOTUNE:
+        return qautotune.init();
+#endif
     default:
         break;
     }
@@ -1751,6 +1786,7 @@ bool QuadPlane::in_vtol_mode(void) const
             plane.control_mode == QLOITER ||
             plane.control_mode == QLAND ||
             plane.control_mode == QRTL ||
+            plane.control_mode == QAUTOTUNE ||
             ((plane.control_mode == GUIDED || plane.control_mode == AVOID_ADSB) && plane.auto_state.vtol_loiter) ||
             in_vtol_auto());
 }
@@ -2327,7 +2363,8 @@ int8_t QuadPlane::forward_throttle_pct(void)
         !motors->armed() ||
         vel_forward.gain <= 0 ||
         plane.control_mode == QSTABILIZE ||
-        plane.control_mode == QHOVER) {
+        plane.control_mode == QHOVER ||
+        plane.control_mode == QAUTOTUNE) {
         return 0;
     }
 
@@ -2404,7 +2441,8 @@ float QuadPlane::get_weathervane_yaw_rate_cds(void)
         !motors->armed() ||
         weathervane.gain <= 0 ||
         plane.control_mode == QSTABILIZE ||
-        plane.control_mode == QHOVER) {
+        plane.control_mode == QHOVER ||
+        plane.control_mode == QAUTOTUNE) {
         weathervane.last_output = 0;
         return 0;
     }

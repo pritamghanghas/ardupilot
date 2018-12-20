@@ -40,7 +40,6 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(stabilize,             400,    100),
     SCHED_TASK(set_servos,            400,    100),
     SCHED_TASK(read_control_switch,     7,    100),
-    SCHED_TASK_CLASS(GCS,                 (GCS*)&plane._gcs,       retry_deferred,         50,  500),
     SCHED_TASK(update_GPS_50Hz,        50,    300),
     SCHED_TASK(update_GPS_10Hz,        10,    400),
     SCHED_TASK(navigate,               10,    150),
@@ -49,8 +48,8 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(update_alt,             10,    200),
     SCHED_TASK(adjust_altitude_target, 10,    200),
     SCHED_TASK(afs_fs_check,           10,    100),
-    SCHED_TASK_CLASS(GCS,                 (GCS*)&plane._gcs,       update,                 50,  500),
-    SCHED_TASK_CLASS(GCS,                 (GCS*)&plane._gcs,       data_stream_send,       50,  500),
+    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_receive,   300,  500),
+    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_send,      300,  500),
     SCHED_TASK_CLASS(AP_ServoRelayEvents, &plane.ServoRelayEvents, update_events,          50,  150),
     SCHED_TASK_CLASS(AP_BattMonitor, &plane.battery, read, 10, 300),
     SCHED_TASK_CLASS(AP_Baro, &plane.barometer, accumulate, 50, 150),
@@ -142,7 +141,7 @@ void Plane::ahrs_update()
 #if HIL_SUPPORT
     if (g.hil_mode == 1) {
         // update hil before AHRS update
-        gcs().update();
+        gcs().update_receive();
     }
 #endif
 
@@ -648,15 +647,20 @@ void Plane::update_flight_mode(void)
     case QHOVER:
     case QLOITER:
     case QLAND:
-    case QRTL: {
+    case QRTL:
+    case QAUTOTUNE: {
         // set nav_roll and nav_pitch using sticks
         int16_t roll_limit = MIN(roll_limit_cd, quadplane.aparm.angle_max);
-        nav_roll_cd  = (channel_roll->get_control_in() / 4500.0) * roll_limit;
-        nav_roll_cd = constrain_int32(nav_roll_cd, -roll_limit, roll_limit);
         float pitch_input = channel_pitch->norm_input();
+
         // Scale from normalized input [-1,1] to centidegrees
         if (quadplane.tailsitter_active()) {
-            // For tailsitters, the pitch range is symmetrical: [-Q_ANGLE_MAX,Q_ANGLE_MAX]
+            // separate limit for tailsitter roll, if set
+            if (quadplane.tailsitter.max_roll_angle > 0) {
+                roll_limit = quadplane.tailsitter.max_roll_angle * 100.0f;
+            }
+
+            // angle max for tailsitter pitch
             nav_pitch_cd = pitch_input * quadplane.aparm.angle_max;
         } else {
             // pitch is further constrained by LIM_PITCH_MIN/MAX which may impose
@@ -668,6 +672,10 @@ void Plane::update_flight_mode(void)
             }
             nav_pitch_cd = constrain_int32(nav_pitch_cd, pitch_limit_min_cd, aparm.pitch_limit_max_cd.get());
         }
+
+        nav_roll_cd  = (channel_roll->get_control_in() / 4500.0) * roll_limit;
+        nav_roll_cd = constrain_int32(nav_roll_cd, -roll_limit, roll_limit);
+
         break;
     }
         
@@ -765,6 +773,7 @@ void Plane::update_navigation()
     case QLOITER:
     case QLAND:
     case QRTL:
+    case QAUTOTUNE:
         // nothing to do
         break;
     }
