@@ -35,11 +35,11 @@ def worker(num):
     
     newLat,newLon = mp_util.gps_offset(Config.basePositionLat, Config.basePositionLon,
                                        Config.interVehicleDistance*(col),-(row)*Config.interVehicleDistance)
-    vehicleCmd = "sim_vehicle.py -I%d -l%f,%f,%d,%d" % (num,newLat,newLon,
+    vehicleCmd = "sim_vehicle.py -I%d -l%f,%f,%d,%d -f quadplane" % (num,newLat,newLon,
                                                         Config.basePositionAlt,Config.basePositionHdg)
     print(vehicleCmd)
 
-    defaultParam = "/home/pritam/copter/ardupilot/Tools/autotest/default_params/copter.parm"
+    defaultParam = "/home/pritam/copter/ardupilot/Tools/autotest/default_params/quadplane.parm"
     lines = open(defaultParam, 'r').readlines()
     new_last_line = "SYSID_THISMAV %f\n" % num
     lines[-1] = new_last_line
